@@ -57,7 +57,7 @@ func initNodeTokenCrypto() error {
 	if ferr != nil {
 		var eerr error
 		if ring, eerr = (nodetoken.EnvKeySource{Var: config.GetNodeTokenKeyEnv()}).Load(); eerr != nil {
-			return fmt.Errorf("load node-token key: file: %w; env: %w", ferr, eerr)
+			return fmt.Errorf("加载节点令牌密钥失败：文件：%w；环境变量：%w", ferr, eerr)
 		}
 	}
 	c, err := nodetoken.NewCodec(mode, ring)
@@ -66,13 +66,13 @@ func initNodeTokenCrypto() error {
 	}
 	nodetoken.Init(c)
 	// The CLI runs before package logger initialization, so use log.Printf.
-	log.Printf("node-token encryption enabled (mode=%s, active-key=%s)", config.GetNodeTokenEncryptionMode(), c.ActiveKeyID())
+	log.Printf("节点令牌加密已启用（模式=%s，活动密钥=%s）", config.GetNodeTokenEncryptionMode(), c.ActiveKeyID())
 	return nil
 }
 
 // runWebServer initializes and starts the web server for the 3x-ui panel.
 func runWebServer() {
-	log.Printf("Starting %v %v", config.GetName(), config.GetPanelVersion())
+	log.Printf("正在启动 %v %v", config.GetName(), config.GetPanelVersion())
 
 	switch config.GetLogLevel() {
 	case config.Debug:
@@ -86,7 +86,7 @@ func runWebServer() {
 	case config.Error:
 		logger.InitLogger(logging.ERROR)
 	default:
-		log.Fatalf("Unknown log level: %v", config.GetLogLevel())
+		log.Fatalf("未知日志级别：%v", config.GetLogLevel())
 	}
 
 	_ = godotenv.Load()
@@ -97,27 +97,27 @@ func runWebServer() {
 
 	if os.Getenv("XUI_PPROF") == "true" {
 		go func() {
-			logger.Info("pprof profiling server listening on 127.0.0.1:6060")
+			logger.Info("pprof 性能分析服务正在监听 127.0.0.1:6060")
 			if err := http.ListenAndServe("127.0.0.1:6060", nil); err != nil {
-				logger.Warning("pprof server stopped: ", err)
+				logger.Warning("pprof 服务已停止：", err)
 			}
 		}()
 	}
 
 	if err := initNodeTokenCrypto(); err != nil {
-		log.Fatalf("Error initializing node-token encryption: %v", err)
+		log.Fatalf("初始化节点令牌加密失败：%v", err)
 	}
 
 	err := database.InitDB(config.GetDBPath())
 	if err != nil {
-		log.Fatalf("Error initializing database: %v", err)
+		log.Fatalf("初始化数据库失败：%v", err)
 	}
 
 	server := web.NewServer()
 	global.SetWebServer(server)
 	err = server.Start()
 	if err != nil {
-		log.Fatalf("Error starting web server: %v", err)
+		log.Fatalf("启动面板服务失败：%v", err)
 	}
 
 	sub.SetDistFS(web.EmbeddedDist())
@@ -126,7 +126,7 @@ func runWebServer() {
 	global.SetSubServer(subServer)
 	err = subServer.Start()
 	if err != nil {
-		log.Fatalf("Error starting sub server: %v", err)
+		log.Fatalf("启动订阅服务失败：%v", err)
 	}
 
 	sigCh := make(chan os.Signal, 8)
@@ -143,18 +143,18 @@ func runWebServer() {
 	monitorCfg := tunnelmonitor.ConfigFromEnv()
 	if monitorCfg.Enabled {
 		if monitorCfg.ProxyURL == "" {
-			logger.Warning("Tunnel health monitor enabled without XUI_TUNNEL_HEALTH_PROXY: the probe measures host connectivity, not the xray tunnel, so failures will restart xray without fixing host network issues")
+			logger.Warning("隧道健康监控已启用，但未设置 XUI_TUNNEL_HEALTH_PROXY：探测检测的是主机连通性，而非 Xray 隧道；探测失败会重启 Xray，但无法修复主机网络问题。")
 		}
 
 		monitorCtx, cancel := context.WithCancel(context.Background())
 		stopTunnelHealthMonitor = cancel
 
 		monitor, err := tunnelmonitor.New(monitorCfg, func(_ context.Context) error {
-			logger.Warning("Tunnel health monitor threshold reached, restarting xray-core")
+			logger.Warning("隧道健康监控达到阈值，正在重启 xray-core。")
 			return server.RestartXray()
 		})
 		if err != nil {
-			logger.Warning("Tunnel health monitor disabled: ", err)
+			logger.Warning("隧道健康监控已禁用：", err)
 		} else {
 			go monitor.Run(monitorCtx)
 		}
@@ -164,38 +164,38 @@ func runWebServer() {
 
 		switch sig {
 		case syscall.SIGHUP:
-			logger.Info("Received SIGHUP signal. Restarting servers...")
+			logger.Info("收到 SIGHUP 信号，正在重启服务...")
 
 			err := server.StopPanelOnly()
 			if err != nil {
-				logger.Debug("Error stopping web server:", err)
+				logger.Debug("停止面板服务失败：", err)
 			}
 			err = subServer.Stop()
 			if err != nil {
-				logger.Debug("Error stopping sub server:", err)
+				logger.Debug("停止订阅服务失败：", err)
 			}
 
 			server = web.NewServer()
 			global.SetWebServer(server)
 			err = server.StartPanelOnly()
 			if err != nil {
-				log.Fatalf("Error restarting web server: %v", err)
+				log.Fatalf("重启面板服务失败：%v", err)
 			}
-			log.Println("Web server restarted successfully.")
+			log.Println("面板服务重启成功。")
 
 			sub.SetDistFS(web.EmbeddedDist())
 			subServer = sub.NewServer()
 			global.SetSubServer(subServer)
 			err = subServer.Start()
 			if err != nil {
-				log.Fatalf("Error restarting sub server: %v", err)
+				log.Fatalf("重启订阅服务失败：%v", err)
 			}
-			log.Println("Sub server restarted successfully.")
+			log.Println("订阅服务重启成功。")
 		case sys.SIGUSR1:
-			logger.Info("Received USR1 signal, restarting xray-core...")
+			logger.Info("收到 USR1 信号，正在重启 xray-core...")
 			err := server.RestartXray()
 			if err != nil {
-				logger.Error("Failed to restart xray-core:", err)
+				logger.Error("重启 xray-core 失败：", err)
 			}
 
 		default:
@@ -208,10 +208,10 @@ func runWebServer() {
 			// ------------------------------------------------------------
 
 			if err := server.Stop(); err != nil {
-				logger.Error("Server shutdown failed:", err)
+				logger.Error("关闭服务失败：", err)
 			}
 			_ = subServer.Stop()
-			log.Println("Shutting down servers.")
+			log.Println("正在关闭服务。")
 			return
 		}
 	}
@@ -221,17 +221,17 @@ func runWebServer() {
 func resetSetting() error {
 	err := database.InitDB(config.GetDBPath())
 	if err != nil {
-		fmt.Println("Failed to initialize database:", err)
+		fmt.Println("初始化数据库失败：", err)
 		return err
 	}
 
 	settingService := service.SettingService{}
 	err = settingService.ResetSettings()
 	if err != nil {
-		fmt.Println("Failed to reset settings:", err)
+		fmt.Println("重置设置失败：", err)
 		return err
 	} else {
-		fmt.Println("Settings successfully reset.")
+		fmt.Println("设置已成功重置。")
 	}
 	return nil
 }
@@ -242,44 +242,45 @@ func showSetting(show bool) {
 		settingService := service.SettingService{}
 		port, err := settingService.GetPort()
 		if err != nil {
-			fmt.Println("get current port failed, error info:", err)
+			fmt.Println("获取当前端口失败，错误信息：", err)
 		}
 
 		webBasePath, err := settingService.GetBasePath()
 		if err != nil {
-			fmt.Println("get webBasePath failed, error info:", err)
+			fmt.Println("获取面板访问路径失败，错误信息：", err)
 		}
 
 		certFile, err := settingService.GetCertFile()
 		if err != nil {
-			fmt.Println("get cert file failed, error info:", err)
+			fmt.Println("获取证书文件失败，错误信息：", err)
 		}
 		keyFile, err := settingService.GetKeyFile()
 		if err != nil {
-			fmt.Println("get key file failed, error info:", err)
+			fmt.Println("获取私钥文件失败，错误信息：", err)
 		}
 
 		userService := panel.UserService{}
 		userModel, err := userService.GetFirstUser()
 		if err != nil {
-			fmt.Println("get current user info failed, error info:", err)
+			fmt.Println("获取当前用户信息失败，错误信息：", err)
 		}
 
 		if userModel.Username == "" || userModel.Password == "" {
-			fmt.Println("current username or password is empty")
+			fmt.Println("当前用户名或密码为空。")
 		}
 
-		fmt.Println("current panel settings as follows:")
+		fmt.Println("当前面板设置如下：")
 		if certFile == "" || keyFile == "" {
-			fmt.Println("Warning: Panel is not secure with SSL")
+			fmt.Println("警告：面板未配置 SSL 安全连接。")
 		} else {
-			fmt.Println("Panel is secure with SSL")
+			fmt.Println("面板已启用 SSL 安全连接。")
 		}
 
 		hasDefaultCredential := func() bool {
 			return userModel.Username == "admin" && crypto.CheckPasswordHash(userModel.Password, "admin")
 		}()
 
+		// 以下字段供安装及管理脚本解析，中文化时保留原始键名和布尔值。
 		fmt.Println("hasDefaultCredential:", hasDefaultCredential)
 		fmt.Println("port:", port)
 		fmt.Println("webBasePath:", webBasePath)
@@ -294,14 +295,14 @@ func updateTgbotEnableSts(status bool) {
 		fmt.Println(err)
 		return
 	}
-	logger.Infof("current enabletgbot status[%v],need update to status[%v]", currentTgSts, status)
+	logger.Infof("Telegram 通知当前启用状态［%v］，需要更新为［%v］", currentTgSts, status)
 	if currentTgSts != status {
 		err := settingService.SetTgbotEnabled(status)
 		if err != nil {
 			fmt.Println(err)
 			return
 		} else {
-			logger.Infof("SetTgbotEnabled[%v] success", status)
+			logger.Infof("Telegram 通知启用状态已成功设为［%v］", status)
 		}
 	}
 }
@@ -310,7 +311,7 @@ func updateTgbotEnableSts(status bool) {
 func updateTgbotSetting(tgBotToken string, tgBotChatid string, tgBotRuntime string) {
 	err := database.InitDB(config.GetDBPath())
 	if err != nil {
-		fmt.Println("Error initializing database:", err)
+		fmt.Println("初始化数据库失败：", err)
 		return
 	}
 
@@ -319,28 +320,28 @@ func updateTgbotSetting(tgBotToken string, tgBotChatid string, tgBotRuntime stri
 	if tgBotToken != "" {
 		err := settingService.SetTgBotToken(tgBotToken)
 		if err != nil {
-			fmt.Printf("Error setting Telegram bot token: %v\n", err)
+			fmt.Printf("设置 Telegram 机器人令牌失败：%v\n", err)
 			return
 		}
-		logger.Info("Successfully updated Telegram bot token.")
+		logger.Info("Telegram 机器人令牌更新成功。")
 	}
 
 	if tgBotRuntime != "" {
 		err := settingService.SetTgbotRuntime(tgBotRuntime)
 		if err != nil {
-			fmt.Printf("Error setting Telegram bot runtime: %v\n", err)
+			fmt.Printf("设置 Telegram 机器人运行计划失败：%v\n", err)
 			return
 		}
-		logger.Infof("Successfully updated Telegram bot runtime to [%s].", tgBotRuntime)
+		logger.Infof("Telegram 机器人运行计划已成功更新为［%s］。", tgBotRuntime)
 	}
 
 	if tgBotChatid != "" {
 		err := settingService.SetTgBotChatId(tgBotChatid)
 		if err != nil {
-			fmt.Printf("Error setting Telegram bot chat ID: %v\n", err)
+			fmt.Printf("设置 Telegram 机器人聊天 ID 失败：%v\n", err)
 			return
 		}
-		logger.Info("Successfully updated Telegram bot chat ID.")
+		logger.Info("Telegram 机器人聊天 ID 更新成功。")
 	}
 }
 
@@ -349,26 +350,26 @@ func updateTgbotSetting(tgBotToken string, tgBotChatid string, tgBotRuntime stri
 func encryptNodeTokens() {
 	_ = godotenv.Load()
 	if err := initNodeTokenCrypto(); err != nil {
-		fmt.Println("node-token encryption init failed:", err)
+		fmt.Println("初始化节点令牌加密失败：", err)
 		os.Exit(1)
 	}
 	if err := database.InitDB(config.GetDBPath()); err != nil {
-		fmt.Println("database initialization failed:", err)
+		fmt.Println("初始化数据库失败：", err)
 		os.Exit(1)
 	}
 	changed, skipped, err := (&service.NodeService{}).MigrateNodeTokensToActiveKey()
 	if err != nil {
-		fmt.Println("token migration failed:", err)
+		fmt.Println("令牌迁移失败：", err)
 		os.Exit(1)
 	}
-	fmt.Printf("node-token migration complete: %d re-encrypted, %d already current/skipped\n", changed, skipped)
+	fmt.Printf("节点令牌迁移完成：%d 项已重新加密，%d 项已为当前版本或已跳过。\n", changed, skipped)
 }
 
 // updateSetting updates various panel settings including port, credentials, base path, listen IP, and two-factor authentication.
 func updateSetting(port int, username string, password string, webBasePath string, listenIP string, resetTwoFactor bool) error {
 	err := database.InitDB(config.GetDBPath())
 	if err != nil {
-		fmt.Println("Database initialization failed:", err)
+		fmt.Println("初始化数据库失败：", err)
 		return err
 	}
 
@@ -378,27 +379,27 @@ func updateSetting(port int, username string, password string, webBasePath strin
 	if port > 0 {
 		err := settingService.SetPort(port)
 		if err != nil {
-			fmt.Println("Failed to set port:", err)
+			fmt.Println("设置端口失败：", err)
 		} else {
-			fmt.Printf("Port set successfully: %v\n", port)
+			fmt.Printf("端口设置成功：%v\n", port)
 		}
 	}
 
 	if username != "" || password != "" {
 		err := userService.UpdateFirstUser(username, password)
 		if err != nil {
-			fmt.Println("Failed to update username and password:", err)
+			fmt.Println("更新用户名和密码失败：", err)
 		} else {
-			fmt.Println("Username and password updated successfully")
+			fmt.Println("用户名和密码更新成功。")
 		}
 	}
 
 	if webBasePath != "" {
 		err := settingService.SetBasePath(webBasePath)
 		if err != nil {
-			fmt.Println("Failed to set base URI path:", err)
+			fmt.Println("设置面板访问路径失败：", err)
 		} else {
-			fmt.Println("Base URI path set successfully")
+			fmt.Println("面板访问路径设置成功。")
 		}
 	}
 
@@ -406,19 +407,19 @@ func updateSetting(port int, username string, password string, webBasePath strin
 		err := settingService.SetTwoFactorEnable(false)
 
 		if err != nil {
-			fmt.Println("Failed to reset two-factor authentication:", err)
+			fmt.Println("重置双重验证失败：", err)
 		} else {
 			_ = settingService.SetTwoFactorToken("")
-			fmt.Println("Two-factor authentication reset successfully")
+			fmt.Println("双重验证重置成功。")
 		}
 	}
 
 	if listenIP != "" {
 		err := settingService.SetListen(listenIP)
 		if err != nil {
-			fmt.Println("Failed to set listen IP:", err)
+			fmt.Println("设置监听 IP 地址失败：", err)
 		} else {
-			fmt.Printf("listen %v set successfully\n", listenIP)
+			fmt.Printf("监听 IP 地址已成功设为 %v。\n", listenIP)
 		}
 	}
 
@@ -437,33 +438,33 @@ func updateCert(publicKey string, privateKey string) {
 		settingService := service.SettingService{}
 		err = settingService.SetCertFile(publicKey)
 		if err != nil {
-			fmt.Println("set certificate public key failed:", err)
+			fmt.Println("设置证书公钥文件失败：", err)
 		} else {
-			fmt.Println("set certificate public key success")
+			fmt.Println("证书公钥文件设置成功。")
 		}
 
 		err = settingService.SetKeyFile(privateKey)
 		if err != nil {
-			fmt.Println("set certificate private key failed:", err)
+			fmt.Println("设置证书私钥文件失败：", err)
 		} else {
-			fmt.Println("set certificate private key success")
+			fmt.Println("证书私钥文件设置成功。")
 		}
 
 		err = settingService.SetSubCertFile(publicKey)
 		if err != nil {
-			fmt.Println("set certificate for subscription public key failed:", err)
+			fmt.Println("设置订阅证书公钥文件失败：", err)
 		} else {
-			fmt.Println("set certificate for subscription public key success")
+			fmt.Println("订阅证书公钥文件设置成功。")
 		}
 
 		err = settingService.SetSubKeyFile(privateKey)
 		if err != nil {
-			fmt.Println("set certificate for subscription private key failed:", err)
+			fmt.Println("设置订阅证书私钥文件失败：", err)
 		} else {
-			fmt.Println("set certificate for subscription private key success")
+			fmt.Println("订阅证书私钥文件设置成功。")
 		}
 	} else {
-		fmt.Println("both public and private key should be entered.")
+		fmt.Println("证书公钥和私钥文件必须同时提供，或同时留空。")
 	}
 }
 
@@ -473,11 +474,11 @@ func GetCertificate(getCert bool) {
 		settingService := service.SettingService{}
 		certFile, err := settingService.GetCertFile()
 		if err != nil {
-			fmt.Println("get cert file failed, error info:", err)
+			fmt.Println("获取证书文件失败，错误信息：", err)
 		}
 		keyFile, err := settingService.GetKeyFile()
 		if err != nil {
-			fmt.Println("get key file failed, error info:", err)
+			fmt.Println("获取私钥文件失败，错误信息：", err)
 		}
 
 		fmt.Println("cert:", certFile)
@@ -492,7 +493,7 @@ func GetListenIP(getListen bool) {
 		settingService := service.SettingService{}
 		ListenIP, err := settingService.GetListen()
 		if err != nil {
-			log.Printf("Failed to retrieve listen IP: %v", err)
+			log.Printf("获取监听 IP 地址失败：%v", err)
 			return
 		}
 
@@ -509,18 +510,18 @@ func GetApiToken(getApiToken bool, tokenName, tokenScope string) {
 	name := strings.TrimSpace(tokenName)
 	err := database.InitDB(config.GetDBPath())
 	if err != nil {
-		fmt.Println("open database failed, error info:", err)
+		fmt.Println("打开数据库失败，错误信息：", err)
 		return
 	}
 	apiTokenService := panel.ApiTokenService{}
 	tokens, err := apiTokenService.List()
 	if err != nil {
-		fmt.Println("get apiToken failed, error info:", err)
+		fmt.Println("获取 API 令牌失败，错误信息：", err)
 		return
 	}
 	if len(tokens) > 0 {
-		fmt.Printf("There are %d API token(s) configured. Existing tokens cannot be retrieved in plaintext because only hashes are stored.\n", len(tokens))
-		fmt.Println("If you have lost your token, you can manage and generate new tokens through the Panel UI (Settings -> API Tokens).")
+		fmt.Printf("当前已配置 %d 个 API 令牌。系统仅保存哈希值，无法找回现有令牌的明文。\n", len(tokens))
+		fmt.Println("如已丢失令牌，可通过面板中的“设置 -> API 令牌”管理并生成新令牌。")
 
 		// Rotate one token per name so repeated calls cannot pile up
 		// indefinitely many admin-equivalent tokens that never expire.
@@ -530,10 +531,10 @@ func GetApiToken(getApiToken bool, tokenName, tokenScope string) {
 		}
 		created, err := apiTokenService.RecreateByName(rotated, tokenScope)
 		if err != nil {
-			fmt.Println("Failed to create a fallback API token:", err)
+			fmt.Println("创建备用 API 令牌失败：", err)
 			return
 		}
-		fmt.Printf("\nThe API token %q has been regenerated (any previous one is now invalid):\n", rotated)
+		fmt.Printf("\nAPI 令牌 %q 已重新生成（此前的同名令牌现已失效）：\n", rotated)
 		fmt.Println("apiToken:", created.Token)
 		return
 	}
@@ -542,7 +543,7 @@ func GetApiToken(getApiToken bool, tokenName, tokenScope string) {
 	}
 	created, err := apiTokenService.Create(name, tokenScope, 0)
 	if err != nil {
-		fmt.Println("create apiToken failed, error info:", err)
+		fmt.Println("创建 API 令牌失败，错误信息：", err)
 		return
 	}
 	fmt.Println("apiToken:", created.Token)
@@ -557,9 +558,9 @@ func migrateDb() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Start migrating database...")
+	fmt.Println("正在开始迁移数据库...")
 	inboundService.MigrateDB()
-	fmt.Println("Migration done!")
+	fmt.Println("迁移完成！")
 }
 
 // loadServiceEnvFile loads the systemd EnvironmentFile so CLI subcommands like
@@ -572,7 +573,7 @@ func loadServiceEnvFile() {
 			continue
 		}
 		if err := godotenv.Load(path); err != nil {
-			log.Printf("warning: failed to load env file %s: %v", path, err)
+			log.Printf("警告：加载环境配置文件 %s 失败：%v", path, err)
 		}
 		return
 	}
@@ -589,7 +590,7 @@ func main() {
 	}
 
 	var showVersion bool
-	flag.BoolVar(&showVersion, "v", false, "show version")
+	flag.BoolVar(&showVersion, "v", false, "显示版本")
 
 	runCmd := flag.NewFlagSet("run", flag.ExitOnError)
 
@@ -599,11 +600,11 @@ func main() {
 	var migrateDump string
 	var migrateRestore string
 	var migrateOut string
-	migrateDbCmd.StringVar(&migrateDsn, "dsn", "", "Destination PostgreSQL DSN (postgres://user:pass@host:port/db?sslmode=disable)")
-	migrateDbCmd.StringVar(&migrateSrc, "src", "", "Source SQLite file (defaults to the configured x-ui.db)")
-	migrateDbCmd.StringVar(&migrateDump, "dump", "", "Write a portable SQL text dump of --src to this file (.db -> .dump)")
-	migrateDbCmd.StringVar(&migrateRestore, "restore", "", "Rebuild a SQLite database from this SQL text dump (.dump -> .db); requires --out")
-	migrateDbCmd.StringVar(&migrateOut, "out", "", "Destination SQLite file for --restore (must not already exist)")
+	migrateDbCmd.StringVar(&migrateDsn, "dsn", "", "目标 PostgreSQL DSN（postgres://user:pass@host:port/db?sslmode=disable）")
+	migrateDbCmd.StringVar(&migrateSrc, "src", "", "源 SQLite 文件（默认为当前配置的 x-ui.db）")
+	migrateDbCmd.StringVar(&migrateDump, "dump", "", "将 --src 导出为可移植的 SQL 文本文件（.db -> .dump）")
+	migrateDbCmd.StringVar(&migrateRestore, "restore", "", "从 SQL 文本文件重建 SQLite 数据库（.dump -> .db），必须指定 --out")
+	migrateDbCmd.StringVar(&migrateOut, "out", "", "--restore 使用的目标 SQLite 文件（必须尚不存在）")
 
 	settingCmd := flag.NewFlagSet("setting", flag.ExitOnError)
 	var port int
@@ -625,30 +626,32 @@ func main() {
 	var tokenName string
 	var tokenScope string
 	var resetTwoFactor bool
-	settingCmd.BoolVar(&reset, "reset", false, "Reset all settings")
-	settingCmd.BoolVar(&show, "show", false, "Display current settings")
-	settingCmd.IntVar(&port, "port", 0, "Set panel port number")
-	settingCmd.StringVar(&username, "username", "", "Set login username")
-	settingCmd.StringVar(&password, "password", "", "Set login password")
-	settingCmd.StringVar(&webBasePath, "webBasePath", "", "Set base path for Panel")
-	settingCmd.StringVar(&listenIP, "listenIP", "", "set panel listenIP IP")
-	settingCmd.BoolVar(&resetTwoFactor, "resetTwoFactor", false, "Reset two-factor authentication settings")
-	settingCmd.BoolVar(&getListen, "getListen", false, "Display current panel listenIP IP")
-	settingCmd.BoolVar(&getCert, "getCert", false, "Display current certificate settings")
-	settingCmd.BoolVar(&getApiToken, "getApiToken", false, "Print an API token for CLI use, regenerating it and invalidating the previous one; on a panel with no tokens yet it mints one instead")
-	settingCmd.StringVar(&tokenName, "tokenName", "", "Name of the token -getApiToken acts on (default: "+cliFallbackTokenName+", or "+installTokenName+" on a panel with no tokens)")
-	settingCmd.StringVar(&tokenScope, "tokenScope", "", "Scope of the token -getApiToken issues: admin, monitor or node-sync (default: the scope of the token it replaces, or admin for a new one)")
-	settingCmd.StringVar(&webCertFile, "webCert", "", "Set path to public key file for panel")
-	settingCmd.StringVar(&webKeyFile, "webCertKey", "", "Set path to private key file for panel")
-	settingCmd.StringVar(&tgbottoken, "tgbottoken", "", "Set token for Telegram bot")
-	settingCmd.StringVar(&tgbotRuntime, "tgbotRuntime", "", "Set cron time for Telegram bot notifications")
-	settingCmd.StringVar(&tgbotchatid, "tgbotchatid", "", "Set chat ID for Telegram bot notifications")
-	settingCmd.BoolVar(&enabletgbot, "enabletgbot", false, "Enable notifications via Telegram bot")
+	settingCmd.BoolVar(&reset, "reset", false, "重置所有设置")
+	settingCmd.BoolVar(&show, "show", false, "显示当前设置")
+	settingCmd.IntVar(&port, "port", 0, "设置面板端口号")
+	settingCmd.StringVar(&username, "username", "", "设置登录用户名")
+	settingCmd.StringVar(&password, "password", "", "设置登录密码")
+	settingCmd.StringVar(&webBasePath, "webBasePath", "", "设置面板访问路径")
+	settingCmd.StringVar(&listenIP, "listenIP", "", "设置面板监听 IP 地址")
+	settingCmd.BoolVar(&resetTwoFactor, "resetTwoFactor", false, "重置双重验证设置")
+	settingCmd.BoolVar(&getListen, "getListen", false, "显示当前面板监听 IP 地址")
+	settingCmd.BoolVar(&getCert, "getCert", false, "显示当前证书设置")
+	settingCmd.BoolVar(&getApiToken, "getApiToken", false, "输出命令行使用的 API 令牌：重新生成并使旧令牌失效；面板尚无令牌时则创建新令牌")
+	settingCmd.StringVar(&tokenName, "tokenName", "", "-getApiToken 操作的令牌名称（默认："+cliFallbackTokenName+"，或 "+installTokenName+"，在面板尚无令牌时使用）")
+	settingCmd.StringVar(&tokenScope, "tokenScope", "", "-getApiToken 签发令牌的权限范围：admin、monitor 或 node-sync（默认继承被替换令牌的范围；新令牌默认为 admin）")
+	settingCmd.StringVar(&webCertFile, "webCert", "", "设置面板证书公钥文件路径")
+	settingCmd.StringVar(&webKeyFile, "webCertKey", "", "设置面板证书私钥文件路径")
+	settingCmd.StringVar(&tgbottoken, "tgbottoken", "", "设置 Telegram 机器人令牌")
+	settingCmd.StringVar(&tgbotRuntime, "tgbotRuntime", "", "设置 Telegram 机器人通知的 cron 时间")
+	settingCmd.StringVar(&tgbotchatid, "tgbotchatid", "", "设置 Telegram 机器人通知的聊天 ID")
+	settingCmd.BoolVar(&enabletgbot, "enabletgbot", false, "启用 Telegram 机器人通知")
 
-	oldUsage := flag.Usage
+	for _, command := range []*flag.FlagSet{runCmd, migrateDbCmd, settingCmd} {
+		command.Usage = func() { printCLIUsage(command) }
+	}
 	flag.Usage = func() {
-		oldUsage()
-		fmt.Print(commandHelp())
+		printCLIUsage(flag.CommandLine)
+		fmt.Fprint(flag.CommandLine.Output(), commandHelp())
 	}
 
 	flag.Parse()
@@ -681,27 +684,27 @@ func main() {
 		switch {
 		case migrateDump != "":
 			if err := database.DumpSQLite(src, migrateDump); err != nil {
-				fmt.Println("dump failed:", err)
+				fmt.Println("导出失败：", err)
 				os.Exit(1)
 			}
-			fmt.Printf("Dumped %s -> %s\n", src, migrateDump)
+			fmt.Printf("已导出 %s -> %s\n", src, migrateDump)
 		case migrateRestore != "":
 			if migrateOut == "" {
-				fmt.Println("--out is required when using --restore: the destination .db path (must not exist)")
+				fmt.Println("使用 --restore 时必须指定 --out：目标 .db 文件路径（必须尚不存在）")
 				return
 			}
 			if err := database.RestoreSQLite(migrateRestore, migrateOut); err != nil {
-				fmt.Println("restore failed:", err)
+				fmt.Println("恢复失败：", err)
 				os.Exit(1)
 			}
-			fmt.Printf("Restored %s -> %s\n", migrateRestore, migrateOut)
+			fmt.Printf("已恢复 %s -> %s\n", migrateRestore, migrateOut)
 		case migrateDsn != "":
 			if err := database.MigrateData(src, migrateDsn); err != nil {
-				fmt.Println("migration failed:", err)
+				fmt.Println("迁移失败：", err)
 				os.Exit(1)
 			}
 		default:
-			fmt.Println("nothing to do: pass --dump <file>, --restore <file> --out <db>, or --dsn <postgres-dsn>")
+			fmt.Println("未指定操作：请传入 --dump <file>、--restore <file> --out <db>，或 --dsn <postgres-dsn>")
 		}
 	case "setting":
 		err := settingCmd.Parse(os.Args[2:])
@@ -712,7 +715,7 @@ func main() {
 		// flag stops parsing at the first non-flag argument, so the `-getApiToken true`
 		// form drops every flag written after it. Say so instead of acting on a default.
 		if rest := settingCmd.Args(); len(rest) > 0 {
-			fmt.Printf("warning: ignored %q and any flags after it; put flags before positional arguments\n", strings.Join(rest, " "))
+			fmt.Printf("警告：已忽略 %q 及其后的所有选项；请将选项放在位置参数之前。\n", strings.Join(rest, " "))
 		}
 		if reset {
 			if err = resetSetting(); err != nil {
@@ -756,7 +759,7 @@ func main() {
 			updateCert(webCertFile, webKeyFile)
 		}
 	default:
-		fmt.Println("Invalid subcommands")
+		fmt.Println("无效的子命令")
 		fmt.Println()
 		runCmd.Usage()
 		fmt.Println()
@@ -766,11 +769,18 @@ func main() {
 
 func commandHelp() string {
 	return `
-Commands:
-    run            run web panel
-    migrate        migrate from other/old x-ui
-    migrate-db     SQLite <-> .dump (--dump/--restore) or copy into PostgreSQL (--dsn)
-    encrypt-tokens encrypt node bearer tokens with the configured active key
-    setting        set settings
+命令：
+    run            运行面板服务
+    migrate        从其他或旧版 x-ui 迁移
+    migrate-db     SQLite <-> .dump（--dump/--restore），或复制至 PostgreSQL（--dsn）
+    encrypt-tokens 使用已配置的活动密钥加密节点令牌
+    setting        修改或查看面板设置
+    cert           设置或清除面板证书
 `
+}
+
+// 中文帮助仅替换展示标题，保留 flag 包的参数名称、默认值和退出行为。
+func printCLIUsage(command *flag.FlagSet) {
+	fmt.Fprintf(command.Output(), "用法：%s [选项]\n", command.Name())
+	command.PrintDefaults()
 }

@@ -23,11 +23,29 @@
 
 上游原始工作流保存在 `.github/upstream-workflows/`，仅用于追溯，不会自动执行。实际构建发布入口为 `.github/workflows/noad-release.yml`，避免意外部署上游文档站、发布 Docker 镜像或调用上游专用服务。
 
+## 命令行中文化
+
+当前分支已将管理菜单、安装和更新脚本、证书与数据库管理、主程序参数帮助及操作结果提示改为简体中文。中文化修改仅在源码仓库及后续构建中生效，**不会覆盖已经发布的 `v3.9.0-noad.1` Release 文件，也不会自动部署到服务器**。原始上游引用、署名及许可证继续保留。
+
+- 命令名、参数、环境变量及 `y/n`、`t/g` 等输入值不变，中文提示说明对应含义和默认值。
+- `hasDefaultCredential:`、`port:`、`webBasePath:`、`cert:`、`key:`、`listenIP:`、`apiToken:` 等输出字段供脚本解析，保留原始拼写和布尔值；更新状态 JSON 与安装结果环境文件格式也保持不变。
+- 第三方程序（例如系统包管理器、acme.sh、Xray）的原生日志，以及封禁日志协议字段，不强制翻译；本次不修改网页语言设置或服务端业务日志体系。
+- 安装和更新脚本仍指向上游发行渠道，并非本衍生版的一键安装器；运行官方安装、更新或菜单更新可能覆盖去广告及中文化修改。
+- 后续完整包包含同一提交的中文管理菜单；仅面板包仍只提供面板程序，不替换已安装的管理菜单。构建来源以包内 `NOAD_BUILD.json` 的提交记录为准。
+
+回归检查不执行安装器或更新器的实际入口，只提取无副作用的函数验证菜单、确认输入、非交互默认值和更新状态格式；指定编译后的面板程序时，还会在临时数据库目录验证帮助及固定输出字段：
+
+```bash
+python3 -m pip install tree-sitter==0.26.0 tree-sitter-bash==0.25.1
+python3 scripts/test-cli-zh.py
+python3 scripts/test-cli-zh.py --binary /path/to/x-ui-noad
+```
+
 ## 下载与校验
 
 从本仓库 [Releases](https://github.com/GG-bonded/3xui_noAD/releases) 获取产物，**不要使用上游一键安装命令来安装此衍生版**。
 
-- `x-ui-linux-amd64-noad.tar.gz`：Linux amd64 完整包，以官方 v3.9.0 安装包为基础，仅替换去广告面板主程序并补充许可证、来源和修改说明。
+- `x-ui-linux-amd64-noad.tar.gz`：Linux amd64 完整包，以官方 v3.9.0 安装包为基础，替换去广告面板主程序并补充许可证、来源和修改说明；中文化提交后的构建还包含中文管理菜单，既有 Release 保持不变。
 - `x-ui-panel-linux-amd64-noad.tar.gz`：仅面板主程序，供已经安装 v3.9.0 的 Linux amd64 环境做最小替换；不包含 Xray 或 geodata。
 - `3xui-noad-source.tar.gz`：对应发行提交的完整源码和构建脚本，不包含私有运行数据。
 - `SHA256SUMS`：以上文件的 SHA-256 校验值。

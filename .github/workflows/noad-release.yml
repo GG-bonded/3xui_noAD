@@ -30,6 +30,12 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install static C toolchain
         run: sudo apt-get update && sudo apt-get install -y musl-tools
+      # 只提取并运行无副作用的脚本函数，禁止在 CI 执行实际安装或更新。
+      - name: Test Chinese shell prompts and compatibility
+        run: |
+          python3 -m venv "$RUNNER_TEMP/3xui-cli-tests"
+          "$RUNNER_TEMP/3xui-cli-tests/bin/pip" install tree-sitter==0.26.0 tree-sitter-bash==0.25.1
+          "$RUNNER_TEMP/3xui-cli-tests/bin/python" scripts/test-cli-zh.py
       - name: Install frontend dependencies
         run: npm ci
         working-directory: frontend
@@ -45,7 +51,10 @@ jobs:
         env:
           CGO_ENABLED: '1'
           CC: musl-gcc
-        run: go test -count=1 ./internal/config ./internal/web/service/panel ./internal/web/controller
+        run: |
+          test -z "$(gofmt -l main.go)"
+          go test -count=1 -run '^TestGetApiToken' .
+          go test -count=1 ./internal/config ./internal/web/service/panel ./internal/web/controller
       - name: Build static Linux amd64 panel
         env:
           CGO_ENABLED: '1'
@@ -56,8 +65,12 @@ jobs:
           go build -trimpath -buildvcs=true -ldflags="-s -w -linkmode external -extldflags '-static'" -o /tmp/x-ui-noad .
           test "$(/tmp/x-ui-noad -v)" = '3.9.0-noad.1'
           file /tmp/x-ui-noad
+      - name: Test compiled Chinese CLI and machine-readable output
+        run: '"$RUNNER_TEMP/3xui-cli-tests/bin/python" scripts/test-cli-zh.py --binary /tmp/x-ui-noad'
       - name: Package and checksum
-        run: python3 scripts/package-noad.py --binary /tmp/x-ui-noad --output release
+        run: |
+          python3 scripts/package-noad.py --binary /tmp/x-ui-noad --output release
+          tar -xOf release/x-ui-linux-amd64-noad.tar.gz x-ui/x-ui.sh | cmp - x-ui.sh
       - uses: actions/upload-artifact@v4
         with:
           name: 3xui-noad-linux-amd64

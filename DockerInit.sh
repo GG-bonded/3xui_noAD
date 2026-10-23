@@ -1,4 +1,5 @@
 #!/bin/sh
+# 构建错误使用中文提示，发行标签和下载地址保持不变。
 set -e
 case $1 in
     amd64)
@@ -28,7 +29,7 @@ case $1 in
 esac
 MTG_MULTI_VER=$(curl -sfL "https://api.github.com/repos/mhsanaei/mtg-multi/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)
 if [ -z "$MTG_MULTI_VER" ]; then
-    echo "DockerInit: could not resolve the latest mtg-multi release tag" >&2
+    echo "DockerInit：无法解析 mtg-multi 最新发行标签。" >&2
     exit 1
 fi
 mkdir -p build/bin
