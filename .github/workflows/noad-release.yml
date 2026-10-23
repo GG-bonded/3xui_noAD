@@ -1,0 +1,82 @@
+name: Test and Release NoAD
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/no-ad-v3.9.0
+    tags:
+      - 'v*-noad.*'
+
+permissions:
+  contents: read
+
+jobs:
+  linux-amd64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install static C toolchain
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+      - name: Typecheck and run sponsor regressions
+        run: |
+          npm run typecheck
+          npm test -- src/test/sponsors.test.tsx src/test/sponsor-slot-noad.test.tsx
+        working-directory: frontend
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+      - name: Test affected backend modules
+        env:
+          CGO_ENABLED: '1'
+          CC: musl-gcc
+        run: go test -count=1 ./internal/config ./internal/web/service/panel ./internal/web/controller
+      - name: Build static Linux amd64 panel
+        env:
+          CGO_ENABLED: '1'
+          CC: musl-gcc
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          go build -trimpath -buildvcs=true -ldflags="-s -w -linkmode external -extldflags '-static'" -o /tmp/x-ui-noad .
+          test "$(/tmp/x-ui-noad -v)" = '3.9.0-noad.1'
+          file /tmp/x-ui-noad
+      - name: Package and checksum
+        run: python3 scripts/package-noad.py --binary /tmp/x-ui-noad --output release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 3xui-noad-linux-amd64
+          path: |
+            release/*.tar.gz
+            release/SHA256SUMS
+          if-no-files-found: error
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          # Exact files only: never upload private deployment data or the working directory.
+          gh release create "$RELEASE_TAG" \
+            release/x-ui-linux-amd64-noad.tar.gz \
+            release/x-ui-panel-linux-amd64-noad.tar.gz \
+            release/3xui-noad-source.tar.gz \
+            release/SHA256SUMS \
+            --verify-tag --title "3x-ui 3.9.0 NoAD.1" \
+            --notes 'Unofficial GPL-3.0 derivative of MHSanaei/3x-ui v3.9.0. Disables sponsor slots and removes remote sponsor-list/logo fetching. Includes complete Linux amd64 package, panel-only package, corresponding source, and SHA256SUMS. See README for upstream attribution, changes, build instructions, and update limitations.'
